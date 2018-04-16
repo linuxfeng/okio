@@ -1,0 +1,15 @@
+apply plugin: 'org.jetbrains.kotlin.platform.jvm'
+
+apply plugin: "me.champeau.gradle.jmh"
+
+sourceCompatibility = JavaVersion.VERSION_1_7
+targetCompatibility = JavaVersion.VERSION_1_7
+
+dependencies {
+  jmh project(":okio")
+  jmh deps.jmh
+}
+
+jmh {
+  duplicateClassesStrategy = 'warn'
+}

@@ -1,0 +1,13 @@
+apply plugin: 'org.jetbrains.kotlin.platform.jvm'
+
+sourceCompatibility = JavaVersion.VERSION_1_6
+targetCompatibility = JavaVersion.VERSION_1_6
+
+dependencies {
+  implementation project(':okio')
+  implementation deps.kotlin.stdLib.jre6
+  implementation deps.jsr305
+  testImplementation deps.kotlin.test.jre
+  testImplementation deps.test.junit
+  testImplementation deps.test.assertj
+}

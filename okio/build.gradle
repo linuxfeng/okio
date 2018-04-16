@@ -1,0 +1,12 @@
+apply plugin: 'org.jetbrains.kotlin.platform.jvm'
+
+sourceCompatibility = JavaVersion.VERSION_1_7
+targetCompatibility = JavaVersion.VERSION_1_7
+
+dependencies {
+  implementation deps.kotlin.stdLib.jre7
+  implementation deps.jsr305
+  implementation deps.animalSniffer
+  testImplementation deps.test.junit
+  testImplementation deps.kotlin.test.jre
+}
