@@ -50,6 +50,7 @@ import static okio.Util.checkOffsetAndCount;
  * environments that run both trusted and untrusted code in the same process.
  */
 public class ByteString implements Serializable, Comparable<ByteString> {
+  //十六进制包含的所有数字和字母，注意顺序
   static final char[] HEX_DIGITS =
       { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
   private static final long serialVersionUID = 1L;
@@ -67,6 +68,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
 
   /**
    * Returns a new byte string containing a clone of the bytes of {@code data}.
+   * 返回一个新的, 克隆data数据的ByteString
    */
   public static ByteString of(byte... data) {
     if (data == null) throw new IllegalArgumentException("data == null");
@@ -86,6 +88,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
     return new ByteString(copy);
   }
 
+  //ByteBuffer类是在javaNIO中常常使用的一个缓冲区类，使用ByteBuffer可以进行高效的IO操作
   public static ByteString of(ByteBuffer data) {
     if (data == null) throw new IllegalArgumentException("data == null");
 
@@ -95,6 +98,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
   }
 
   /** Returns a new byte string containing the {@code UTF-8} bytes of {@code s}. */
+  //java中使用Charset来表示编码对象,Charset字符集
   public static ByteString encodeUtf8(String s) {
     if (s == null) throw new IllegalArgumentException("s == null");
     ByteString byteString = new ByteString(s.getBytes(Util.UTF_8));
@@ -110,6 +114,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
   }
 
   /** Constructs a new {@code String} by decoding the bytes as {@code UTF-8}. */
+  //返回一个以utf8编码的字符串
   public String utf8() {
     String result = utf8;
     // We don't care if we double-allocate in racy code.
@@ -117,6 +122,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
   }
 
   /** Constructs a new {@code String} by decoding the bytes using {@code charset}. */
+  //返回一个以charset编码的字符串
   public String string(Charset charset) {
     if (charset == null) throw new IllegalArgumentException("charset == null");
     return new String(data, charset);
@@ -205,6 +211,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
   }
 
   /** Returns this byte string encoded in hexadecimal. */
+  //返回十六进制的字符串？？？
   public String hex() {
     char[] result = new char[data.length * 2];
     int c = 0;
@@ -216,6 +223,7 @@ public class ByteString implements Serializable, Comparable<ByteString> {
   }
 
   /** Decodes the hex-encoded bytes and returns their value a byte string. */
+  //十六进制字符串到ByteString
   public static ByteString decodeHex(String hex) {
     if (hex == null) throw new IllegalArgumentException("hex == null");
     if (hex.length() % 2 != 0) throw new IllegalArgumentException("Unexpected hex string: " + hex);
@@ -524,6 +532,12 @@ public class ByteString implements Serializable, Comparable<ByteString> {
     return s.length();
   }
 
+  /**
+   *
+   * @param in ObjectInputStream 和 ObjectOutputStream 的作用是，对基本数据和对象进行序列化操作支持。
+   *           只有支持 java.io.Serializable 或 java.io.Externalizable 接口的对象才能被ObjectInputStream/ObjectOutputStream所操作！
+   * @throws IOException
+   */
   private void readObject(ObjectInputStream in) throws IOException {
     int dataLength = in.readInt();
     ByteString byteString = ByteString.read(in, dataLength);

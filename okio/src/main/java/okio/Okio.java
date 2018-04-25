@@ -37,6 +37,7 @@ import static okio.Util.checkOffsetAndCount;
 
 /** Essential APIs for working with Okio. */
 public final class Okio {
+  //通过Java的Logger类输出日志，默认是输出到控制台
   static final Logger logger = Logger.getLogger(Okio.class.getName());
 
   private Okio() {
@@ -73,6 +74,7 @@ public final class Okio {
       @Override public void write(Buffer source, long byteCount) throws IOException {
         checkOffsetAndCount(source.size, 0, byteCount);
         while (byteCount > 0) {
+            //同步判断是否超时
           timeout.throwIfReached();
           Segment head = source.head;
           int toCopy = (int) Math.min(byteCount, head.limit - head.pos);
@@ -115,8 +117,11 @@ public final class Okio {
   public static Sink sink(Socket socket) throws IOException {
     if (socket == null) throw new IllegalArgumentException("socket == null");
     if (socket.getOutputStream() == null) throw new IOException("socket's output stream == null");
+    //获取异步超时控制
     AsyncTimeout timeout = timeout(socket);
+    //获取sink，重写write,加入超时控制，不具备异步超时控制
     Sink sink = sink(socket.getOutputStream(), timeout);
+    //获取具备异步超时监控的sink
     return timeout.sink(sink);
   }
 
@@ -221,6 +226,7 @@ public final class Okio {
   public static Source source(Socket socket) throws IOException {
     if (socket == null) throw new IllegalArgumentException("socket == null");
     if (socket.getInputStream() == null) throw new IOException("socket's input stream == null");
+    //获取异步超时监控
     AsyncTimeout timeout = timeout(socket);
     Source source = source(socket.getInputStream(), timeout);
     return timeout.source(source);
@@ -235,7 +241,7 @@ public final class Okio {
         }
         return ioe;
       }
-
+      //超时，则关闭socket
       @Override protected void timedOut() {
         try {
           socket.close();

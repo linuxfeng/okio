@@ -27,9 +27,14 @@ import static okio.Util.checkOffsetAndCount;
  * implement timeouts where they aren't supported natively, such as to sockets that are blocked on
  * writing.
  *
+ * 通过一个后台线程监控超时单向链表，这是因为比如socket在写的时候会阻塞。
+ *
  * <p>Subclasses should override {@link #timedOut} to take action when a timeout occurs. This method
  * will be invoked by the shared watchdog thread so it should not do any long-running operations.
  * Otherwise we risk starving other timeouts from being triggered.
+ *
+ * 如果要用AsyncTimeout，必须实现timedOut方法，当超时发生的时候，timedOut方法将在后台线程里面调用，所以timedOut方法里
+ * 不要做太耗时间的操作，这样会影响对超时的监控
  *
  * <p>Use {@link #sink} and {@link #source} to apply this timeout to a stream. The returned value
  * will apply the timeout to each operation on the wrapped stream.
@@ -43,16 +48,22 @@ public class AsyncTimeout extends Timeout {
    * Don't write more than 64 KiB of data at a time, give or take a segment. Otherwise slow
    * connections may suffer timeouts even when they're making (slow) progress. Without this, writing
    * a single 1 MiB buffer may never succeed on a sufficiently slow connection.
+   *
+   * 不要一次写超过64k的数据否则可能会在慢连接中导致超时
    */
   private static final int TIMEOUT_WRITE_SIZE = 64 * 1024;
 
-  /** Duration for the watchdog thread to be idle before it shuts itself down. */
+  /**
+   * watchdog线程关闭自己之前空闲的时间
+   * Duration for the watchdog thread to be idle before it shuts itself down. */
   private static final long IDLE_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(60);
   private static final long IDLE_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(IDLE_TIMEOUT_MILLIS);
 
   /**
    * The watchdog thread processes a linked list of pending timeouts, sorted in the order to be
    * triggered. This class synchronizes on AsyncTimeout.class. This lock guards the queue.
+   *
+   * watchdog线程监控一个链表，这个链表以超时发生的先后顺序排序，通过AsyncTimeout.class保证链表的同步
    *
    * <p>Head's 'next' points to the first element of the linked list. The first element is the next
    * node to time out, or null if the queue is empty. The head is null until the watchdog thread is
@@ -70,6 +81,7 @@ public class AsyncTimeout extends Timeout {
   private long timeoutAt;
 
   public final void enter() {
+      //如果已经在链表里，则退出
     if (inQueue) throw new IllegalStateException("Unbalanced enter/exit");
     long timeoutNanos = timeoutNanos();
     boolean hasDeadline = hasDeadline();
@@ -83,6 +95,8 @@ public class AsyncTimeout extends Timeout {
   private static synchronized void scheduleTimeout(
       AsyncTimeout node, long timeoutNanos, boolean hasDeadline) {
     // Start the watchdog thread and create the head node when the first timeout is scheduled.
+      //当head为空时，new 一个head,也就是说链表头head是一个空的，不参数超时计算和超时时间比较
+      // 开始watchdog监控线程
     if (head == null) {
       head = new AsyncTimeout();
       new Watchdog().start();
@@ -103,15 +117,17 @@ public class AsyncTimeout extends Timeout {
 
     // Insert the node in sorted order.
     long remainingNanos = node.remainingNanos(now);
+    //超时时间从小到大排列插入
     for (AsyncTimeout prev = head; true; prev = prev.next) {
       if (prev.next == null || remainingNanos < prev.next.remainingNanos(now)) {
-        node.next = prev.next;
-        prev.next = node;
-        if (prev == head) {
-          AsyncTimeout.class.notify(); // Wake up the watchdog when inserting at the front.
+            node.next = prev.next;
+            prev.next = node;
+            if (prev == head) {
+                //插入的node在head之后，就唤醒watchdog
+                AsyncTimeout.class.notify(); // Wake up the watchdog when inserting at the front.
+            }
+            break;
         }
-        break;
-      }
     }
   }
 
@@ -122,7 +138,11 @@ public class AsyncTimeout extends Timeout {
     return cancelScheduledTimeout(this);
   }
 
-  /** Returns true if the timeout occurred. */
+  /**
+   * 从链表里删除对应node，如果找到，删除并返回false
+   * 如果没有找到，说明超时已经发生，返回true
+   *
+   * Returns true if the timeout occurred. */
   private static synchronized boolean cancelScheduledTimeout(AsyncTimeout node) {
     // Remove the node from the linked list.
     for (AsyncTimeout prev = head; prev != null; prev = prev.next) {
@@ -163,10 +183,12 @@ public class AsyncTimeout extends Timeout {
 
         while (byteCount > 0L) {
           // Count how many bytes to write. This loop guarantees we split on a segment boundary.
+            //计算有多少个字节需要写：1，toWrite 要小于TIMEOUT_WRITE_SIZE。
           long toWrite = 0L;
           for (Segment s = source.head; toWrite < TIMEOUT_WRITE_SIZE; s = s.next) {
             int segmentSize = s.limit - s.pos;
             toWrite += segmentSize;
+            //如果可写的大于byteCount，去byteCount
             if (toWrite >= byteCount) {
               toWrite = byteCount;
               break;
@@ -175,14 +197,17 @@ public class AsyncTimeout extends Timeout {
 
           // Emit one write. Only this section is subject to the timeout.
           boolean throwOnTimeout = false;
+          //向监控队列中加入this
           enter();
           try {
             sink.write(source, toWrite);
             byteCount -= toWrite;
             throwOnTimeout = true;
           } catch (IOException e) {
+              //异常，this移除监控队列
             throw exit(e);
           } finally {
+              //this移除监控队列
             exit(throwOnTimeout);
           }
         }
@@ -298,6 +323,12 @@ public class AsyncTimeout extends Timeout {
     return e;
   }
 
+  /**
+   * WatchDog线程在后台进行监听超时，里面的run方法执行的就是核心的超时判断，
+   * 之所以在socket写时采取异步超时，这完全是由socket自身的性质决定的，socket经常会阻塞自己，导致下面的事情执行不了。
+   * AsyncTimeout继承于Timeout类，可以覆写里面的timeout方法，这个方法会在watchdog的线程中调用，
+   * 所以不能执行长时间的操作，否则就会引发其他的超时
+   */
   private static final class Watchdog extends Thread {
     Watchdog() {
       super("Okio Watchdog");
@@ -323,6 +354,7 @@ public class AsyncTimeout extends Timeout {
           }
 
           // Close the timed out node.
+            //超时发生后，所做的处理
           timedOut.timedOut();
         } catch (InterruptedException ignored) {
         }
@@ -336,12 +368,16 @@ public class AsyncTimeout extends Timeout {
    * there continues to be no node after waiting {@code IDLE_TIMEOUT_NANOS}. It returns null if a
    * new node was inserted while waiting. Otherwise this returns the node being waited on that has
    * been removed.
+   *
+   * 返回和移除一个在链表头的node，
    */
   static @Nullable AsyncTimeout awaitTimeout() throws InterruptedException {
     // Get the next eligible node.
     AsyncTimeout node = head.next;
 
     // The queue is empty. Wait until either something is enqueued or the idle timeout elapses.
+      //如果队列是空的，就等待IDLE_TIMEOUT_MILLIS，在等待的过程中，被唤醒了，说明有node插入，返回null，
+      //如果没唤醒，返回head
     if (node == null) {
       long startNanos = System.nanoTime();
       AsyncTimeout.class.wait(IDLE_TIMEOUT_MILLIS);
@@ -352,6 +388,8 @@ public class AsyncTimeout extends Timeout {
 
     long waitNanos = node.remainingNanos(System.nanoTime());
 
+    //队列的第一个还没超时，等待，等待结束后，返回null，继续遍历,在下次的遍历中
+      //处理发生超时的node
     // The head of the queue hasn't timed out yet. Await that.
     if (waitNanos > 0) {
       // Waiting is made complicated by the fact that we work in nanoseconds,
@@ -361,7 +399,7 @@ public class AsyncTimeout extends Timeout {
       AsyncTimeout.class.wait(waitMillis, (int) waitNanos);
       return null;
     }
-
+    //队列的第一个已经超时，则移除队列，并返回超时的node.
     // The head of the queue has timed out. Remove it.
     head.next = node.next;
     node.next = null;

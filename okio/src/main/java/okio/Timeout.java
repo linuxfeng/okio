@@ -38,12 +38,14 @@ import java.util.concurrent.TimeUnit;
  * composed of one or more operations. Use deadlines to set an upper bound on
  * the time invested on a job. For example, a battery-conscious app may limit
  * how much time it spends pre-loading content.
+ * 对一个操作设置超时时间
  */
 public class Timeout {
   /**
    * An empty timeout that neither tracks nor detects timeouts. Use this when
    * timeouts aren't necessary, such as in implementations whose operations
    * do not block.
+   * 一个空的超时时间，用于对超时没要求的地方，比如非阻塞的。
    */
   public static final Timeout NONE = new Timeout() {
     @Override public Timeout timeout(long timeout, TimeUnit unit) {
@@ -62,9 +64,9 @@ public class Timeout {
    * True if {@code deadlineNanoTime} is defined. There is no equivalent to null
    * or 0 for {@link System#nanoTime}.
    */
-  private boolean hasDeadline;
-  private long deadlineNanoTime;
-  private long timeoutNanos;
+  private boolean hasDeadline;//有截止时间
+  private long deadlineNanoTime;//纳秒级截止时间
+  private long timeoutNanos;//纳秒级的等待时间
 
   public Timeout() {
   }
@@ -139,6 +141,7 @@ public class Timeout {
    * Throws an {@link InterruptedIOException} if the deadline has been reached or if the current
    * thread has been interrupted. This method doesn't detect timeouts; that should be implemented to
    * asynchronously abort an in-progress operation.
+   * 判断是否到了截止时间
    */
   public void throwIfReached() throws IOException {
     if (Thread.interrupted()) {
@@ -151,6 +154,7 @@ public class Timeout {
   }
 
   /**
+   * 重要说明：这个方法必须synchronized的情况下被调用，这是有对象的wait()性质决定的。
    * Waits on {@code monitor} until it is notified. Throws {@link InterruptedIOException} if either
    * the thread is interrupted or if this timeout elapses before {@code monitor} is notified. The
    * caller must be synchronized on {@code monitor}.
@@ -190,7 +194,7 @@ public class Timeout {
     try {
       boolean hasDeadline = hasDeadline();
       long timeoutNanos = timeoutNanos();
-
+      //如果没有设置超时时间，永远等着，直到通过monitor的notify等被唤醒
       if (!hasDeadline && timeoutNanos == 0L) {
         monitor.wait(); // There is no timeout: wait forever.
         return;

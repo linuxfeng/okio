@@ -56,8 +56,11 @@ public final class SocketTimeoutTest {
   }
 
   @Test public void writeWithoutTimeout() throws Exception {
+    //获取socket套接字，socket方法的实现在测试用例里面有
     Socket socket = socket(0, ONE_MB);
+    //获取带缓冲区的输出流
     Sink sink = Okio.buffer(Okio.sink(socket));
+    //设置超时时间
     sink.timeout().timeout(500, TimeUnit.MILLISECONDS);
     byte[] data = new byte[ONE_MB];
     sink.write(new Buffer().write(data), data.length);

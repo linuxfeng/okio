@@ -50,6 +50,8 @@ import static okio.Util.checkOffsetAndCount;
  * binary search. We use one array rather than two for the directory as a micro-optimization.
  */
 final class SegmentedByteString extends ByteString {
+  //transient , 这个字段的生命周期仅存于调用者的内存中而不会写到磁盘里持久化
+  //也就是在序列化的过程中，这个字段不会被序列化
   final transient byte[][] segments;
   final transient int[] directory;
 

@@ -20,9 +20,12 @@ import javax.annotation.Nullable;
 /**
  * A collection of unused segments, necessary to avoid GC churn and zero-fill.
  * This pool is a thread-safe static singleton.
+ * 收集不用的数据段，避免GC和零填充
+ * 涉及到增删是线程安全
  */
 final class SegmentPool {
   /** The maximum number of bytes to pool. */
+  //但凡这种回收资源再利用，一般都大小限制，这样更安全
   // TODO: Is 64 KiB a good maximum size? Do we ever have that many idle segments?
   static final long MAX_SIZE = 64 * 1024; // 64 KiB.
 
